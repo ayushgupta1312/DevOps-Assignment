@@ -28,3 +28,6 @@ jobs:
       run: |
         cd backend
         pytest
+    - name: Docker build backend image
+      run: |
+        docker build -t backend-app ./backend
