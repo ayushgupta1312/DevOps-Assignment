@@ -1,0 +1,67 @@
+name: Full CI - Backend & Frontend (Push to ECR)
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    env:
+      REGION: ${{ secrets.AWS_REGION }}
+      ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      BACKEND_REPO: ${{ secrets.ECR_REPO_BACKEND }}
+      FRONTEND_REPO: ${{ secrets.ECR_REPO_FRONTEND }}
+      IMAGE_TAG: ${{ github.sha }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Python dependencies & run backend tests
+      working-directory: backend
+      run: |
+        pip install -r requirements.txt
+        pytest
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Run frontend tests
+      working-directory: frontend
+      run: npm test
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+
+    - name: Build & Push Backend Docker image
+      working-directory: backend
+      run: |
+        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG .
+        docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG
+
+    - name: Build & Push Frontend Docker image
+      working-directory: frontend
+      run: |
+        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG --build-arg NEXT_PUBLIC_API_URL=http://408897322842.dkr.ecr.ap-south-1.amazonaws.com/devops-backend/api .
+        docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG
