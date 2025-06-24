@@ -54,6 +54,15 @@ jobs:
       run: |
         aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
+    - name: Get Backend ALB DNS
+      id: get-alb
+      run: |
+        ALB_DNS=$(aws elbv2 describe-load-balancers \
+          --names devops-alb \
+          --query "LoadBalancers[0].DNSName" \
+          --output text)
+        echo "NEXT_PUBLIC_API_URL=http://$ALB_DNS/api" >> $GITHUB_ENV
+
     - name: Build & Push Backend Docker image
       working-directory: backend
       run: |
@@ -63,5 +72,6 @@ jobs:
     - name: Build & Push Frontend Docker image
       working-directory: frontend
       run: |
-        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG --build-arg NEXT_PUBLIC_API_URL=http://408897322842.dkr.ecr.ap-south-1.amazonaws.com/devops-backend/api .
+        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG \
+          --build-arg NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }} .
         docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG
