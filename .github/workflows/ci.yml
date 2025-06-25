@@ -1,4 +1,4 @@
-name: Full CI - Backend & Frontend (Push to ECR)
+name: Build and Push to ECR
 
 on:
   push:
@@ -16,62 +16,54 @@ jobs:
       IMAGE_TAG: ${{ github.sha }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-    - name: Install Python dependencies & run backend tests
-      working-directory: backend
-      run: |
-        pip install -r requirements.txt
-        pytest
+      - name: Install Python dependencies & run backend tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pytest
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-    - name: Install frontend dependencies
-      working-directory: frontend
-      run: npm ci
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
 
-    - name: Run frontend tests
-      working-directory: frontend
-      run: npm test
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Login to Amazon ECR
-      run: |
-        aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $REGION \
+          | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 
-    - name: Get Backend ALB DNS
-      id: get-alb
-      run: |
-        ALB_DNS=$(aws elbv2 describe-load-balancers \
-          --names devops-alb \
-          --query "LoadBalancers[0].DNSName" \
-          --output text)
-        echo "NEXT_PUBLIC_API_URL=http://$ALB_DNS/api" >> $GITHUB_ENV
+      - name: Build & Push Backend Docker Image
+        working-directory: backend
+        run: |
+          docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG .
+          docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG
 
-    - name: Build & Push Backend Docker image
-      working-directory: backend
-      run: |
-        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG .
-        docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$BACKEND_REPO:$IMAGE_TAG
-
-    - name: Build & Push Frontend Docker image
-      working-directory: frontend
-      run: |
-        docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG \
-          --build-arg NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }} .
-        docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG
+      - name: Build & Push Frontend Docker Image (placeholder URL)
+        working-directory: frontend
+        run: |
+          docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG \
+            --build-arg NEXT_PUBLIC_API_URL=http://placeholder-backend-url/api .
+          docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$FRONTEND_REPO:$IMAGE_TAG
